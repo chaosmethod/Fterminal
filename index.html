@@ -2,29 +2,35 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=240, initial-scale=1.0">
     <title>Fallout Terminal Hacking Game for Rabbit r1</title>
     <style>
         body {
             background-color: black;
             color: limegreen;
             font-family: monospace;
-            font-size: 12px;
+            font-size: 10px;
             margin: 0;
-            padding: 10px;
+            padding: 5px;
+            width: 240px;
+            height: 282px;
             overflow: hidden;
+            box-sizing: border-box;
         }
         #terminal {
             white-space: pre;
-            line-height: 1.2;
+            line-height: 1.0;
             pointer-events: none; /* Disable touchscreen during gameplay */
+            height: 220px;
+            overflow: hidden;
         }
         .highlight {
             background-color: limegreen;
             color: black;
         }
         #status {
-            margin-top: 10px;
+            margin-top: 5px;
+            height: 20px;
         }
         #new-game {
             display: none;
@@ -38,6 +44,10 @@
             min-width: 44px; /* Minimum touch target size */
             min-height: 44px;
         }
+        span {
+            display: inline-block;
+            width: 10px; /* Approximate char width */
+        }
     </style>
 </head>
 <body>
@@ -50,30 +60,32 @@
     </div>
 
     <script>
-        // Game configuration
-        const WORD_LENGTH = 7; // Example word length
-        const NUM_WORDS = 10; // Number of potential words
+        // Game configuration adjusted for 240x282px
+        const WORD_LENGTH = 7;
+        const NUM_WORDS = 12; // Increased slightly for more wrong answers to waste turns
         const ATTEMPTS = 5;
-        const LINES = 20; // Approximate lines in terminal
-        const CHARS_PER_LINE = 40; // Approximate chars per line
+        const LINES = 18; // Reduced to fit height
+        const CHARS_PER_LINE = 24; // Reduced to fit width (~240px at 10px font)
 
-        // Sample word list (expand with more themes)
+        // Expanded word list with 7-letter words
         const WORDS = [
-            "ACCESS", "DENIED", "SYSTEM", "HACKER", "TERMIN", "VAULTS", "FALLOU",
-            "NUCLEAR", "RADIAT", "MUTANT", "PIPBOY", "BROTHE", "ENCLAV", "SUPERM"
-        ]; // Use words of WORD_LENGTH
+            "ACCESSX", "DENIEDX", "SYSTEMS", "HACKERS", "TERMINS", "VAULTSS", "FALLOUT",
+            "NUCLEAR", "RADIATE", "MUTANTS", "PIPBOYS", "BROTHER", "ENCLAVE", "SUPERMS",
+            "WASTELD", "RAIDERS", "GHOULSS", "BOSHOOD", "VAULT13", "OVERSEE", "PIP2000"
+        ];
 
         let password;
         let attemptsLeft = ATTEMPTS;
         let terminalText = [];
-        let selectableItems = []; // {type: 'word' or 'dud', position: {line, start, end}, value: word or dud}
-        let highlightIndex = 0;
+        let selectableItems = []; // {type: 'word' or 'dud', startPos, endPos, value}
+        let highlightIndex = 0; // Now the character position (0 to totalChars-1)
+        const TOTAL_CHARS = LINES * CHARS_PER_LINE;
 
         function generatePuzzle() {
             // Select password
             password = WORDS[Math.floor(Math.random() * WORDS.length)];
 
-            // Select other words
+            // Select other words (wrong answers to waste turns)
             let words = [password];
             while (words.length < NUM_WORDS) {
                 let w = WORDS[Math.floor(Math.random() * WORDS.length)];
@@ -118,7 +130,7 @@
             let inserted = false;
             while (!inserted) {
                 let lineIdx = Math.floor(Math.random() * LINES);
-                let start = Math.floor(Math.random() * (CHARS_PER_LINE - item.length - 9)) + 9; // After hex
+                let start = Math.floor(Math.random() * (CHARS_PER_LINE - item.length - 7)) + 7; // After hex (7 chars)
                 let canInsert = true;
                 for (let ex of selectableItems) {
                     if (ex.position.line === lineIdx && Math.max(start, ex.position.start) < Math.min(start + item.length, ex.position.end)) {
@@ -129,7 +141,8 @@
                 if (canInsert) {
                     let line = terminalText[lineIdx];
                     terminalText[lineIdx] = line.substring(0, start) + item + line.substring(start + item.length);
-                    selectableItems.push({type, position: {line: lineIdx, start, end: start + item.length}, value});
+                    let startPos = lineIdx * CHARS_PER_LINE + start;
+                    selectableItems.push({type, position: {line: lineIdx, start, end: start + item.length}, startPos, endPos: startPos + item.length, value});
                     inserted = true;
                 }
             }
@@ -137,17 +150,13 @@
 
         function renderTerminal() {
             let html = '';
+            let globalPos = 0;
             terminalText.forEach((line, idx) => {
-                let parts = [];
-                let sortedItems = selectableItems.filter(it => it.position.line === idx).sort((a,b) => a.position.start - b.position.start);
-                let lastEnd = 0;
-                sortedItems.forEach(it => {
-                    parts.push(line.substring(lastEnd, it.position.start));
-                    parts.push(`<span id="item-${selectableItems.indexOf(it)}">${line.substring(it.position.start, it.position.end)}</span>`);
-                    lastEnd = it.position.end;
-                });
-                parts.push(line.substring(lastEnd));
-                html += parts.join('') + '\n';
+                for (let c = 0; c < CHARS_PER_LINE; c++) {
+                    html += `<span id="char-${globalPos}">${line[c]}</span>`;
+                    globalPos++;
+                }
+                html += '\n';
             });
             document.getElementById('terminal').innerHTML = html;
             highlightItem();
@@ -155,67 +164,101 @@
 
         function highlightItem() {
             document.querySelectorAll('span').forEach(sp => sp.classList.remove('highlight'));
-            if (selectableItems.length > 0) {
-                let idx = highlightIndex % selectableItems.length;
-                document.getElementById(`item-${idx}`).classList.add('highlight');
+            if (highlightIndex < 0) highlightIndex = TOTAL_CHARS - 1;
+            if (highlightIndex >= TOTAL_CHARS) highlightIndex = 0;
+            let curPos = highlightIndex;
+            let currentItem = null;
+            for (let item of selectableItems) {
+                if (curPos >= item.startPos && curPos < item.endPos) {
+                    currentItem = item;
+                    break;
+                }
+            }
+            if (currentItem) {
+                // Highlight whole word or dud set
+                for (let p = currentItem.startPos; p < currentItem.endPos; p++) {
+                    document.getElementById(`char-${p}`).classList.add('highlight');
+                }
+            } else {
+                // Highlight single character
+                document.getElementById(`char-${curPos}`).classList.add('highlight');
             }
         }
 
         function moveHighlight(direction) {
-            highlightIndex = (highlightIndex + direction + selectableItems.length) % selectableItems.length;
+            highlightIndex += direction;
             highlightItem();
         }
 
         function select() {
             if (attemptsLeft <= 0) return;
-            let item = selectableItems[highlightIndex];
-            if (item.type === 'word') {
-                if (item.value === password) {
-                    updateStatus('Access Granted!');
-                    endGame();
-                } else {
-                    attemptsLeft--;
-                    let likeness = 0;
-                    for (let i = 0; i < WORD_LENGTH; i++) {
-                        if (item.value[i] === password[i]) likeness++;
-                    }
-                    updateStatus(`Likeness: ${likeness}/${WORD_LENGTH} | Attempts left: ${attemptsLeft}`);
-                    if (attemptsLeft === 0) {
-                        updateStatus('Terminal Locked!');
+            let curPos = highlightIndex;
+            let currentItem = null;
+            for (let item of selectableItems) {
+                if (curPos >= item.startPos && curPos < item.endPos) {
+                    currentItem = item;
+                    break;
+                }
+            }
+            if (currentItem) {
+                if (currentItem.type === 'word') {
+                    if (currentItem.value === password) {
+                        updateStatus('Access Granted!');
                         endGame();
-                    }
-                }
-            } else if (item.type === 'dud') {
-                // Remove a random wrong word or reset attempt
-                let action = Math.random() > 0.5 ? 'remove' : 'reset';
-                if (action === 'remove') {
-                    let wrongWords = selectableItems.filter(it => it.type === 'word' && it.value !== password);
-                    if (wrongWords.length > 0) {
-                        let removeItem = wrongWords[Math.floor(Math.random() * wrongWords.length)];
-                        // Remove from selectable
-                        selectableItems = selectableItems.filter(it => it !== removeItem);
-                        // Clear from text
-                        let line = terminalText[removeItem.position.line];
-                        let garbage = '';
-                        for (let g = 0; g < removeItem.value.length; g++) {
-                            garbage += '.';
+                    } else {
+                        attemptsLeft--;
+                        let likeness = 0;
+                        for (let i = 0; i < WORD_LENGTH; i++) {
+                            if (currentItem.value[i] === password[i]) likeness++;
                         }
-                        terminalText[removeItem.position.line] = line.substring(0, removeItem.position.start) + garbage + line.substring(removeItem.position.end);
-                        updateStatus('Dud removed an entry.');
+                        updateStatus(`Likeness: ${likeness}/${WORD_LENGTH} | Attempts left: ${attemptsLeft}`);
+                        if (attemptsLeft === 0) {
+                            updateStatus('Terminal Locked!');
+                            endGame();
+                        }
                     }
-                } else {
-                    attemptsLeft = Math.min(ATTEMPTS, attemptsLeft + 1);
-                    updateStatus('Dud reset an attempt.');
+                } else if (currentItem.type === 'dud') {
+                    // Remove a random wrong word or reset attempt
+                    let action = Math.random() > 0.5 ? 'remove' : 'reset';
+                    if (action === 'remove') {
+                        let wrongWords = selectableItems.filter(it => it.type === 'word' && it.value !== password);
+                        if (wrongWords.length > 0) {
+                            let removeItem = wrongWords[Math.floor(Math.random() * wrongWords.length)];
+                            // Remove from selectable
+                            selectableItems = selectableItems.filter(it => it !== removeItem);
+                            // Clear from text
+                            let garbage = '';
+                            for (let g = 0; g < removeItem.value.length; g++) {
+                                garbage += '.';
+                            }
+                            let lineIdx = removeItem.position.line;
+                            let start = removeItem.position.start;
+                            terminalText[lineIdx] = terminalText[lineIdx].substring(0, start) + garbage + terminalText[lineIdx].substring(start + removeItem.value.length);
+                            updateStatus('Dud removed an entry.');
+                        }
+                    } else {
+                        attemptsLeft = Math.min(ATTEMPTS, attemptsLeft + 1);
+                        updateStatus('Dud reset an attempt.');
+                    }
+                    // Remove the dud itself
+                    selectableItems = selectableItems.filter(it => it !== currentItem);
+                    let dudGarbage = '';
+                    for (let g = 0; g < currentItem.value.length; g++) {
+                        dudGarbage += '.';
+                    }
+                    let dudLineIdx = currentItem.position.line;
+                    let dudStart = currentItem.position.start;
+                    terminalText[dudLineIdx] = terminalText[dudLineIdx].substring(0, dudStart) + dudGarbage + terminalText[dudLineIdx].substring(dudStart + currentItem.value.length);
+                    renderTerminal();
                 }
-                // Remove the dud itself
-                selectableItems = selectableItems.filter(it => it !== item);
-                let dudLine = terminalText[item.position.line];
-                let dudGarbage = '';
-                for (let g = 0; g < item.value.length; g++) {
-                    dudGarbage += '.';
+            } else {
+                // Selecting on garbage wastes a turn (to "throw random selections")
+                attemptsLeft--;
+                updateStatus(`Invalid selection. Attempts left: ${attemptsLeft}`);
+                if (attemptsLeft === 0) {
+                    updateStatus('Terminal Locked!');
+                    endGame();
                 }
-                terminalText[item.position.line] = dudLine.substring(0, item.position.start) + dudGarbage + dudLine.substring(item.position.end);
-                renderTerminal();
             }
             renderTerminal();
         }
@@ -231,11 +274,11 @@
 
         // Rabbit r1 event listeners
         window.addEventListener('scrollUp', () => {
-            moveHighlight(-1); // Move to previous item
+            moveHighlight(-1);
         });
 
         window.addEventListener('scrollDown', () => {
-            moveHighlight(1); // Move to next item
+            moveHighlight(1);
         });
 
         window.addEventListener('sideClick', () => {
