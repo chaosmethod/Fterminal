@@ -77,9 +77,10 @@
         let password;
         let attemptsLeft = ATTEMPTS;
         let terminalText = [];
-        let selectableItems = []; // {type: 'word' or 'dud', startPos, endPos, value}
-        let highlightIndex = 0; // Now the character position (0 to totalChars-1)
+        let selectableItems = []; // {type: 'word' or 'dud', startPos, endPos, value, position: {line, start, end}}
+        let highlightIndex = 0; // Global position
         const TOTAL_CHARS = LINES * CHARS_PER_LINE;
+        let isSpecialMessage = false;
 
         function generatePuzzle() {
             // Select password
@@ -95,11 +96,11 @@
             // Generate garbage characters
             let garbageChars = '!@#$%^&*()_+-=[]{}|;:,.<>?/~`'.split('');
 
-            // Build terminal lines with hex addresses
+            // Build terminal lines with fully random characters
             terminalText = [];
             for (let i = 0; i < LINES; i++) {
-                let line = `0x${(i * 0x10).toString(16).toUpperCase().padStart(4, '0')} `;
-                for (let j = line.length; j < CHARS_PER_LINE; j++) {
+                let line = '';
+                for (let j = 0; j < CHARS_PER_LINE; j++) {
                     line += garbageChars[Math.floor(Math.random() * garbageChars.length)];
                 }
                 terminalText.push(line);
@@ -130,7 +131,7 @@
             let inserted = false;
             while (!inserted) {
                 let lineIdx = Math.floor(Math.random() * LINES);
-                let start = Math.floor(Math.random() * (CHARS_PER_LINE - item.length - 7)) + 7; // After hex (7 chars)
+                let start = Math.floor(Math.random() * (CHARS_PER_LINE - item.length));
                 let canInsert = true;
                 for (let ex of selectableItems) {
                     if (ex.position.line === lineIdx && Math.max(start, ex.position.start) < Math.min(start + item.length, ex.position.end)) {
@@ -166,7 +167,10 @@
             document.querySelectorAll('span').forEach(sp => sp.classList.remove('highlight'));
             if (highlightIndex < 0) highlightIndex = TOTAL_CHARS - 1;
             if (highlightIndex >= TOTAL_CHARS) highlightIndex = 0;
+            let line = Math.floor(highlightIndex / CHARS_PER_LINE);
+            let col = highlightIndex % CHARS_PER_LINE;
             let curPos = highlightIndex;
+            let curSpanId = line * CHARS_PER_LINE + col;
             let currentItem = null;
             for (let item of selectableItems) {
                 if (curPos >= item.startPos && curPos < item.endPos) {
@@ -176,16 +180,24 @@
             }
             if (currentItem) {
                 // Highlight whole word or dud set
-                for (let p = currentItem.startPos; p < currentItem.endPos; p++) {
-                    document.getElementById(`char-${p}`).classList.add('highlight');
+                let itemLine = currentItem.position.line;
+                let itemStartCol = currentItem.position.start;
+                let itemEndCol = currentItem.position.end;
+                for (let p = itemStartCol; p < itemEndCol; p++) {
+                    let spanId = itemLine * CHARS_PER_LINE + p;
+                    document.getElementById(`char-${spanId}`).classList.add('highlight');
                 }
             } else {
                 // Highlight single character
-                document.getElementById(`char-${curPos}`).classList.add('highlight');
+                document.getElementById(`char-${curSpanId}`).classList.add('highlight');
             }
         }
 
         function moveHighlight(direction) {
+            if (isSpecialMessage) {
+                updateStatus(`Attempts left: ${attemptsLeft}`);
+                isSpecialMessage = false;
+            }
             highlightIndex += direction;
             highlightItem();
         }
@@ -235,10 +247,12 @@
                             let start = removeItem.position.start;
                             terminalText[lineIdx] = terminalText[lineIdx].substring(0, start) + garbage + terminalText[lineIdx].substring(start + removeItem.value.length);
                             updateStatus('Dud removed an entry.');
+                            isSpecialMessage = true;
                         }
                     } else {
                         attemptsLeft = Math.min(ATTEMPTS, attemptsLeft + 1);
                         updateStatus('Dud reset an attempt.');
+                        isSpecialMessage = true;
                     }
                     // Remove the dud itself
                     selectableItems = selectableItems.filter(it => it !== currentItem);
