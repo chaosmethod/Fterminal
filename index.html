@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fallout Terminal Hacking Game for Rabbit r1</title>
+    <style>
+        body {
+            background-color: black;
+            color: limegreen;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 0;
+            padding: 10px;
+            overflow: hidden;
+        }
+        #terminal {
+            white-space: pre;
+            line-height: 1.2;
+            pointer-events: none; /* Disable touchscreen during gameplay */
+        }
+        .highlight {
+            background-color: limegreen;
+            color: black;
+        }
+        #status {
+            margin-top: 10px;
+        }
+        #new-game {
+            display: none;
+            pointer-events: auto; /* Enable touch for new game prompt */
+        }
+        button {
+            background-color: black;
+            color: limegreen;
+            border: 1px solid limegreen;
+            font-family: monospace;
+            min-width: 44px; /* Minimum touch target size */
+            min-height: 44px;
+        }
+    </style>
+</head>
+<body>
+    <div id="terminal"></div>
+    <div id="status"></div>
+    <div id="new-game">
+        <p>Play again?</p>
+        <button id="yes">Yes</button>
+        <button id="no">No</button>
+    </div>
+
+    <script>
+        // Game configuration
+        const WORD_LENGTH = 7; // Example word length
+        const NUM_WORDS = 10; // Number of potential words
+        const ATTEMPTS = 5;
+        const LINES = 20; // Approximate lines in terminal
+        const CHARS_PER_LINE = 40; // Approximate chars per line
+
+        // Sample word list (expand with more themes)
+        const WORDS = [
+            "ACCESS", "DENIED", "SYSTEM", "HACKER", "TERMIN", "VAULTS", "FALLOU",
+            "NUCLEAR", "RADIAT", "MUTANT", "PIPBOY", "BROTHE", "ENCLAV", "SUPERM"
+        ]; // Use words of WORD_LENGTH
+
+        let password;
+        let attemptsLeft = ATTEMPTS;
+        let terminalText = [];
+        let selectableItems = []; // {type: 'word' or 'dud', position: {line, start, end}, value: word or dud}
+        let highlightIndex = 0;
+
+        function generatePuzzle() {
+            // Select password
+            password = WORDS[Math.floor(Math.random() * WORDS.length)];
+
+            // Select other words
+            let words = [password];
+            while (words.length < NUM_WORDS) {
+                let w = WORDS[Math.floor(Math.random() * WORDS.length)];
+                if (!words.includes(w)) words.push(w);
+            }
+
+            // Generate garbage characters
+            let garbageChars = '!@#$%^&*()_+-=[]{}|;:,.<>?/~`'.split('');
+
+            // Build terminal lines with hex addresses
+            terminalText = [];
+            for (let i = 0; i < LINES; i++) {
+                let line = `0x${(i * 0x10).toString(16).toUpperCase().padStart(4, '0')} `;
+                for (let j = line.length; j < CHARS_PER_LINE; j++) {
+                    line += garbageChars[Math.floor(Math.random() * garbageChars.length)];
+                }
+                terminalText.push(line);
+            }
+
+            // Insert words and duds
+            selectableItems = [];
+            words.forEach(word => {
+                insertItem(word, 'word', word);
+            });
+            // Add duds: pairs like () [] {} with garbage inside
+            for (let k = 0; k < Math.floor(NUM_WORDS / 2); k++) { // A few duds
+                let dudPair = ['()', '[]', '{}'][Math.floor(Math.random() * 3)];
+                let dudLength = Math.floor(Math.random() * 5) + 2; // Garbage inside length
+                let dudContent = dudPair[0];
+                for (let m = 0; m < dudLength; m++) {
+                    dudContent += garbageChars[Math.floor(Math.random() * garbageChars.length)];
+                }
+                dudContent += dudPair[1];
+                insertItem(dudContent, 'dud', dudContent);
+            }
+
+            renderTerminal();
+            updateStatus(`Attempts left: ${attemptsLeft}`);
+        }
+
+        function insertItem(item, type, value) {
+            let inserted = false;
+            while (!inserted) {
+                let lineIdx = Math.floor(Math.random() * LINES);
+                let start = Math.floor(Math.random() * (CHARS_PER_LINE - item.length - 9)) + 9; // After hex
+                let canInsert = true;
+                for (let ex of selectableItems) {
+                    if (ex.position.line === lineIdx && Math.max(start, ex.position.start) < Math.min(start + item.length, ex.position.end)) {
+                        canInsert = false;
+                        break;
+                    }
+                }
+                if (canInsert) {
+                    let line = terminalText[lineIdx];
+                    terminalText[lineIdx] = line.substring(0, start) + item + line.substring(start + item.length);
+                    selectableItems.push({type, position: {line: lineIdx, start, end: start + item.length}, value});
+                    inserted = true;
+                }
+            }
+        }
+
+        function renderTerminal() {
+            let html = '';
+            terminalText.forEach((line, idx) => {
+                let parts = [];
+                let sortedItems = selectableItems.filter(it => it.position.line === idx).sort((a,b) => a.position.start - b.position.start);
+                let lastEnd = 0;
+                sortedItems.forEach(it => {
+                    parts.push(line.substring(lastEnd, it.position.start));
+                    parts.push(`<span id="item-${selectableItems.indexOf(it)}">${line.substring(it.position.start, it.position.end)}</span>`);
+                    lastEnd = it.position.end;
+                });
+                parts.push(line.substring(lastEnd));
+                html += parts.join('') + '\n';
+            });
+            document.getElementById('terminal').innerHTML = html;
+            highlightItem();
+        }
+
+        function highlightItem() {
+            document.querySelectorAll('span').forEach(sp => sp.classList.remove('highlight'));
+            if (selectableItems.length > 0) {
+                let idx = highlightIndex % selectableItems.length;
+                document.getElementById(`item-${idx}`).classList.add('highlight');
+            }
+        }
+
+        function moveHighlight(direction) {
+            highlightIndex = (highlightIndex + direction + selectableItems.length) % selectableItems.length;
+            highlightItem();
+        }
+
+        function select() {
+            if (attemptsLeft <= 0) return;
+            let item = selectableItems[highlightIndex];
+            if (item.type === 'word') {
+                if (item.value === password) {
+                    updateStatus('Access Granted!');
+                    endGame();
+                } else {
+                    attemptsLeft--;
+                    let likeness = 0;
+                    for (let i = 0; i < WORD_LENGTH; i++) {
+                        if (item.value[i] === password[i]) likeness++;
+                    }
+                    updateStatus(`Likeness: ${likeness}/${WORD_LENGTH} | Attempts left: ${attemptsLeft}`);
+                    if (attemptsLeft === 0) {
+                        updateStatus('Terminal Locked!');
+                        endGame();
+                    }
+                }
+            } else if (item.type === 'dud') {
+                // Remove a random wrong word or reset attempt
+                let action = Math.random() > 0.5 ? 'remove' : 'reset';
+                if (action === 'remove') {
+                    let wrongWords = selectableItems.filter(it => it.type === 'word' && it.value !== password);
+                    if (wrongWords.length > 0) {
+                        let removeItem = wrongWords[Math.floor(Math.random() * wrongWords.length)];
+                        // Remove from selectable
+                        selectableItems = selectableItems.filter(it => it !== removeItem);
+                        // Clear from text
+                        let line = terminalText[removeItem.position.line];
+                        let garbage = '';
+                        for (let g = 0; g < removeItem.value.length; g++) {
+                            garbage += '.';
+                        }
+                        terminalText[removeItem.position.line] = line.substring(0, removeItem.position.start) + garbage + line.substring(removeItem.position.end);
+                        updateStatus('Dud removed an entry.');
+                    }
+                } else {
+                    attemptsLeft = Math.min(ATTEMPTS, attemptsLeft + 1);
+                    updateStatus('Dud reset an attempt.');
+                }
+                // Remove the dud itself
+                selectableItems = selectableItems.filter(it => it !== item);
+                let dudLine = terminalText[item.position.line];
+                let dudGarbage = '';
+                for (let g = 0; g < item.value.length; g++) {
+                    dudGarbage += '.';
+                }
+                terminalText[item.position.line] = dudLine.substring(0, item.position.start) + dudGarbage + dudLine.substring(item.position.end);
+                renderTerminal();
+            }
+            renderTerminal();
+        }
+
+        function updateStatus(msg) {
+            document.getElementById('status').innerText = msg;
+        }
+
+        function endGame() {
+            document.getElementById('terminal').style.pointerEvents = 'none';
+            document.getElementById('new-game').style.display = 'block';
+        }
+
+        // Rabbit r1 event listeners
+        window.addEventListener('scrollUp', () => {
+            moveHighlight(-1); // Move to previous item
+        });
+
+        window.addEventListener('scrollDown', () => {
+            moveHighlight(1); // Move to next item
+        });
+
+        window.addEventListener('sideClick', () => {
+            select();
+        });
+
+        // New game buttons (touch enabled)
+        document.getElementById('yes').addEventListener('click', () => {
+            document.getElementById('new-game').style.display = 'none';
+            document.getElementById('terminal').style.pointerEvents = 'none'; // Re-disable touch
+            attemptsLeft = ATTEMPTS;
+            highlightIndex = 0;
+            generatePuzzle();
+        });
+
+        document.getElementById('no').addEventListener('click', () => {
+            updateStatus('Game Over.');
+            // Optionally close the webview if desired
+            // closeWebView.postMessage();
+        });
+
+        // Start game
+        generatePuzzle();
+    </script>
+</body>
+</html>
