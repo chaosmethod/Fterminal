@@ -1,7 +1,8 @@
 {
   "title": "Fallout Terminal",
-  "url": "https://fterminal-onpd8pzp0-chaosmethods-projects.vercel.app/",
+  "url": "https://fterminal.vercel.app/",
   "description": "Retro hacking game inspired by Fallout, adapted for Rabbit R1.",
   "iconUrl": "https://raw.githubusercontent.com/chaosmethod/Fterminal/main/icon.png",
   "themeColor": "#00FF00"
+
 }
