@@ -35,6 +35,12 @@
         #new-game {
             display: none;
             pointer-events: auto; /* Enable touch for new game prompt */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #new-game span {
+            margin-right: 10px;
         }
         button {
             background-color: black;
@@ -54,7 +60,7 @@
     <div id="terminal"></div>
     <div id="status"></div>
     <div id="new-game">
-        <p>Play again?</p>
+        <span>Play again?</span>
         <button id="yes">Yes</button>
         <button id="no">No</button>
     </div>
@@ -247,75 +253,4 @@
                             let start = removeItem.position.start;
                             terminalText[lineIdx] = terminalText[lineIdx].substring(0, start) + garbage + terminalText[lineIdx].substring(start + removeItem.value.length);
                             updateStatus('Dud removed an entry.');
-                            isSpecialMessage = true;
-                        }
-                    } else {
-                        attemptsLeft = Math.min(ATTEMPTS, attemptsLeft + 1);
-                        updateStatus('Dud reset an attempt.');
-                        isSpecialMessage = true;
-                    }
-                    // Remove the dud itself
-                    selectableItems = selectableItems.filter(it => it !== currentItem);
-                    let dudGarbage = '';
-                    for (let g = 0; g < currentItem.value.length; g++) {
-                        dudGarbage += '.';
-                    }
-                    let dudLineIdx = currentItem.position.line;
-                    let dudStart = currentItem.position.start;
-                    terminalText[dudLineIdx] = terminalText[dudLineIdx].substring(0, dudStart) + dudGarbage + terminalText[dudLineIdx].substring(dudStart + currentItem.value.length);
-                    renderTerminal();
-                }
-            } else {
-                // Selecting on garbage wastes a turn (to "throw random selections")
-                attemptsLeft--;
-                updateStatus(`Invalid selection. Attempts left: ${attemptsLeft}`);
-                if (attemptsLeft === 0) {
-                    updateStatus('Terminal Locked!');
-                    endGame();
-                }
-            }
-            renderTerminal();
-        }
-
-        function updateStatus(msg) {
-            document.getElementById('status').innerText = msg;
-        }
-
-        function endGame() {
-            document.getElementById('terminal').style.pointerEvents = 'none';
-            document.getElementById('new-game').style.display = 'block';
-        }
-
-        // Rabbit r1 event listeners
-        window.addEventListener('scrollUp', () => {
-            moveHighlight(-1);
-        });
-
-        window.addEventListener('scrollDown', () => {
-            moveHighlight(1);
-        });
-
-        window.addEventListener('sideClick', () => {
-            select();
-        });
-
-        // New game buttons (touch enabled)
-        document.getElementById('yes').addEventListener('click', () => {
-            document.getElementById('new-game').style.display = 'none';
-            document.getElementById('terminal').style.pointerEvents = 'none'; // Re-disable touch
-            attemptsLeft = ATTEMPTS;
-            highlightIndex = 0;
-            generatePuzzle();
-        });
-
-        document.getElementById('no').addEventListener('click', () => {
-            updateStatus('Game Over.');
-            // Optionally close the webview if desired
-            // closeWebView.postMessage();
-        });
-
-        // Start game
-        generatePuzzle();
-    </script>
-</body>
-</html>
+                            isSpecial
